@@ -1,0 +1,27 @@
+name: Regression
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'     # weekly Monday 6am UTC
+  workflow_dispatch:          # manual trigger
+  push:
+    paths:
+      - 'h2c-known-versions.yaml'
+      - 'manifests/**'
+      - 'run-tests.sh'
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+      - run: ./run-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-diff
+          path: /tmp/h2c-testsuite*/diffs/

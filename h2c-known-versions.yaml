@@ -1,0 +1,7 @@
+reference:
+  core: v2.2.0
+  extensions:
+    cert-manager: v0.1.0
+    keycloak: v0.2.0
+    servicemonitor: v0.1.0
+    trust-manager: v0.1.1

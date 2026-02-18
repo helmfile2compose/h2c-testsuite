@@ -1,0 +1,98 @@
+# ClusterIP basic
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend
+  namespace: default
+  labels:
+    app: web-frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: web-frontend
+---
+# ClusterIP multi-port
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-server
+  namespace: default
+  labels:
+    app: api-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: metrics
+  selector:
+    app: api-server
+---
+# ExternalName
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: db.prod.example.com
+---
+# ExternalName chain (points to another internal service FQDN)
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-api-alias
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: api-server.default.svc.cluster.local
+---
+# NodePort
+apiVersion: v1
+kind: Service
+metadata:
+  name: debug-service
+  namespace: default
+  labels:
+    app: debug-service
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+      protocol: TCP
+      name: http
+  selector:
+    app: backend-service
+---
+# LoadBalancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: public-lb
+  namespace: default
+  labels:
+    app: public-lb
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    app: secure-app

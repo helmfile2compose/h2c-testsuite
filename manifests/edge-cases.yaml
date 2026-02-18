@@ -1,0 +1,154 @@
+# Empty document (just separator)
+---
+---
+# Another empty document with whitespace
+
+---
+# 63-char service name (just within hostname limit)
+apiVersion: v1
+kind: Service
+metadata:
+  name: this-is-a-very-long-service-name-that-is-exactly-sixty-three-c
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+  selector:
+    app: long-name-test
+---
+# 64-char service name (triggers hostname truncation)
+apiVersion: v1
+kind: Service
+metadata:
+  name: this-is-a-very-long-service-name-that-is-exactly-sixty-four-ch
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+  selector:
+    app: long-name-test-2
+---
+# Deployment with matching 64-char name
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: this-is-a-very-long-service-name-that-is-exactly-sixty-four-ch
+  namespace: default
+  labels:
+    app: long-name-test-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: long-name-test-2
+  template:
+    metadata:
+      labels:
+        app: long-name-test-2
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+# Deployment without namespace
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-namespace-deploy
+  labels:
+    app: no-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: no-namespace
+  template:
+    metadata:
+      labels:
+        app: no-namespace
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+---
+# Deployment with explicit namespace
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: namespaced-deploy
+  namespace: custom-ns
+  labels:
+    app: namespaced
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: namespaced
+  template:
+    metadata:
+      labels:
+        app: namespaced
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+---
+# Service without selector (manual endpoints)
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-legacy
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql
+---
+# Endpoints for the selector-less service
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: external-legacy
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 10.0.0.50
+    ports:
+      - port: 3306
+        name: mysql
+---
+# Deployment with empty containers list (degenerate)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: empty-containers
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: empty
+  template:
+    metadata:
+      labels:
+        app: empty
+    spec:
+      containers: []
+---
+# Unknown kind (should be skipped/warned)
+apiVersion: example.com/v1
+kind: CustomWidget
+metadata:
+  name: my-widget
+  namespace: default
+spec:
+  color: blue
+  size: large

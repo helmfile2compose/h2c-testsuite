@@ -1,0 +1,107 @@
+# KeycloakRealmImport
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: my-realm-import
+  namespace: default
+spec:
+  keycloakCRName: my-keycloak
+  realm:
+    realm: my-realm
+    enabled: true
+    displayName: My Realm
+    clients:
+      - clientId: my-app
+        enabled: true
+        publicClient: true
+        redirectUris:
+          - "https://app.example.com/*"
+        webOrigins:
+          - "https://app.example.com"
+    users:
+      - username: admin
+        enabled: true
+        credentials:
+          - type: password
+            value: admin
+---
+# Certificate (cert-manager)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: app-tls
+  namespace: default
+spec:
+  secretName: app-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: app.example.com
+  dnsNames:
+    - app.example.com
+    - api.example.com
+  duration: 2160h
+  renewBefore: 360h
+---
+# ClusterIssuer (cert-manager)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# Issuer (cert-manager, namespace-scoped)
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: self-signed
+  namespace: default
+spec:
+  selfSigned: {}
+---
+# ServiceMonitor (prometheus-operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-server-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: api-server
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+---
+# Bundle (trust-manager)
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: ca-bundle
+spec:
+  sources:
+    - useDefaultCAs: true
+    - secret:
+        name: "app-tls-secret"
+        key: "ca.crt"
+  target:
+    configMap:
+      key: "ca-certificates.crt"
+    namespaceSelector:
+      matchLabels:
+        trust-bundle: "true"

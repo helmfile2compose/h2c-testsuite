@@ -1,0 +1,133 @@
+# Basic Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: default
+  labels:
+    app: db-migrate
+spec:
+  template:
+    metadata:
+      labels:
+        app: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: myregistry/api-server:v1.4.2
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: database-url
+---
+# Job with init containers
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-import
+  namespace: default
+  labels:
+    app: data-import
+spec:
+  template:
+    metadata:
+      labels:
+        app: data-import
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z postgresql 5432; do sleep 2; done"]
+        - name: download-data
+          image: curlimages/curl:8.8.0
+          command: ["curl", "-o", "/data/import.sql", "https://example.com/data.sql"]
+          volumeMounts:
+            - name: shared-data
+              mountPath: /data
+      containers:
+        - name: importer
+          image: bitnami/postgresql:16.3.0
+          command: ["psql", "-f", "/data/import.sql"]
+          env:
+            - name: PGHOST
+              value: postgresql
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: postgres-password
+          volumeMounts:
+            - name: shared-data
+              mountPath: /data
+      volumes:
+        - name: shared-data
+          emptyDir: {}
+---
+# Job with sidecar (logging forwarder)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch-processor
+  namespace: default
+  labels:
+    app: batch-processor
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: batch-processor
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: processor
+          image: myregistry/batch:v1.0.0
+          command: ["python", "batch.py", "--all"]
+          env:
+            - name: REDIS_URL
+              value: "redis://redis-master:6379"
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/batch
+        - name: log-forwarder
+          image: fluent/fluent-bit:3.0
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/batch
+              readOnly: true
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+# Job with restartPolicy: Never (no restart)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: one-shot-seed
+  namespace: default
+  labels:
+    app: seed
+spec:
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: seed
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: myregistry/api-server:v1.4.2
+          command: ["python", "manage.py", "seed", "--fixtures", "initial"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: database-url

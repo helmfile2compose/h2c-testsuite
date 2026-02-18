@@ -1,0 +1,245 @@
+# Basic single-container deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: default
+  labels:
+    app: web-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-frontend
+  template:
+    metadata:
+      labels:
+        app: web-frontend
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+# Multi-container deployment (app + sidecar)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  namespace: default
+  labels:
+    app: api-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      containers:
+        - name: api
+          image: myregistry/api-server:v1.4.2
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: database-url
+            - name: LOG_LEVEL
+              value: "info"
+        - name: envoy-sidecar
+          image: envoyproxy/envoy:v1.30-latest
+          ports:
+            - containerPort: 15001
+---
+# With resource limits and requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: default
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: myregistry/worker:v2.0.0
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: QUEUE_URL
+              value: "amqp://rabbitmq:5672"
+---
+# With probes (liveness, readiness, startup)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-service
+  namespace: default
+  labels:
+    app: backend-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-service
+  template:
+    metadata:
+      labels:
+        app: backend-service
+    spec:
+      containers:
+        - name: backend
+          image: myregistry/backend:v3.1.0
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+---
+# With command/args override
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cron-scheduler
+  namespace: default
+  labels:
+    app: cron-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cron-scheduler
+  template:
+    metadata:
+      labels:
+        app: cron-scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: myregistry/scheduler:v1.0.0
+          command: ["/bin/sh", "-c"]
+          args: ["python manage.py run_scheduler --interval=60"]
+---
+# With securityContext (non-root)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app
+  namespace: default
+  labels:
+    app: secure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app
+  template:
+    metadata:
+      labels:
+        app: secure-app
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: app
+          image: myregistry/secure-app:v1.2.0
+          ports:
+            - containerPort: 8443
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+---
+# With hostNetwork
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostNetwork: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.1
+          ports:
+            - containerPort: 9100
+---
+# With serviceAccountName
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-agent
+  namespace: default
+  labels:
+    app: vault-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-agent
+  template:
+    metadata:
+      labels:
+        app: vault-agent
+    spec:
+      serviceAccountName: vault-auth
+      containers:
+        - name: vault-agent
+          image: hashicorp/vault:1.17
+          ports:
+            - containerPort: 8200
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault:8200"

@@ -1,0 +1,107 @@
+# Single path ingress (no class = haproxy fallback)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-frontend-ingress
+  namespace: default
+spec:
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-frontend
+                port:
+                  number: 80
+---
+# Multi-path ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: haproxy
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: api-server
+                port:
+                  number: 8080
+          - path: /v2
+            pathType: Prefix
+            backend:
+              service:
+                name: api-server
+                port:
+                  number: 8080
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: api-server
+                port:
+                  number: 9090
+---
+# TLS ingress with secret reference
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: secure-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: haproxy
+spec:
+  tls:
+    - hosts:
+        - secure.example.com
+      secretName: tls-secure-example
+  rules:
+    - host: secure.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: secure-app
+                port:
+                  number: 8443
+---
+# HAProxy annotations (server-ssl, path-rewrite, server-ca)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: annotated-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: haproxy
+    haproxy.org/server-ssl: "true"
+    haproxy.org/server-ca: "default/ca-secret"
+    haproxy.org/server-sni: "backend.example.com"
+    haproxy.org/path-rewrite: "/api/(.*) /\\1"
+spec:
+  tls:
+    - hosts:
+        - backend.example.com
+      secretName: tls-backend-example
+  rules:
+    - host: backend.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 8080
