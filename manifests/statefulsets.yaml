@@ -143,7 +143,7 @@ spec:
   selector:
     app: elasticsearch
 ---
-# Redis StatefulSet (simple, single replica)
+# Bitnami Redis StatefulSet (triggers bitnami transform)
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -164,14 +164,21 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7.2-alpine
+          image: docker.io/bitnami/redis:7.2.5-debian-12-r4
           ports:
             - containerPort: 6379
               name: redis
-          command: ["redis-server", "--appendonly", "yes"]
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: redis-password
           volumeMounts:
             - name: redis-data
-              mountPath: /data
+              mountPath: /bitnami/redis/data
   volumeClaimTemplates:
     - metadata:
         name: redis-data

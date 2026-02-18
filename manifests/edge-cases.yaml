@@ -143,6 +143,72 @@ spec:
     spec:
       containers: []
 ---
+# Deployment with null fields (Helm conditional blocks produce these)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: null-fields-deploy
+  namespace: default
+  labels:
+    app: null-fields
+  annotations: null
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: null-fields
+  template:
+    metadata:
+      labels:
+        app: null-fields
+    spec:
+      securityContext: null
+      initContainers: null
+      containers:
+        - name: app
+          image: myregistry/null-test:v1.0.0
+          ports: null
+          securityContext: null
+---
+# Service with null selector and ports
+apiVersion: v1
+kind: Service
+metadata:
+  name: null-fields-svc
+  namespace: default
+spec:
+  type: ClusterIP
+  selector: null
+  ports: null
+---
+# ConfigMap with null data
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: null-data-cm
+  namespace: default
+data: null
+---
+# Secret with null data and stringData
+apiVersion: v1
+kind: Secret
+metadata:
+  name: null-data-secret
+  namespace: default
+type: Opaque
+data: null
+stringData: null
+---
+# Ingress with null annotations and rules
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: null-ingress
+  namespace: default
+  annotations: null
+spec:
+  rules: null
+---
 # Unknown kind (should be skipped/warned)
 apiVersion: example.com/v1
 kind: CustomWidget

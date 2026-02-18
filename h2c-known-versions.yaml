@@ -1,12 +1,13 @@
 reference:
-  core: v2.2.0
+  core: v2.3.1
   extensions:
     cert-manager: v0.1.0
     keycloak: v0.2.0
     servicemonitor: v0.1.0
     trust-manager: v0.1.1
-    nginx: v0.1.0
-    traefik: v0.1.0
+    nginx: v0.1.1
+    traefik: v0.1.1
     flatten-internal-urls: v0.1.1
+    bitnami: v0.1.0
   exclude-ext-all:
     - flatten-internal-urls
