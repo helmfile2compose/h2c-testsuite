@@ -44,19 +44,22 @@ done
 # YAML parser (no pyyaml needed)
 # ---------------------------------------------------------------------------
 parse_versions_file() {
-    local in_extensions=false
+    local section=""
     REF_CORE=""
     declare -gA REF_EXTENSIONS=()
+    declare -ga EXCLUDE_EXT_ALL=()
 
     while IFS= read -r line; do
         stripped="${line#"${line%%[![:space:]]*}"}"
         if [[ "$stripped" == core:* ]]; then
             REF_CORE="${stripped#core:}"
             REF_CORE="${REF_CORE// /}"
-            in_extensions=false
+            section=""
         elif [[ "$stripped" == "extensions:" ]]; then
-            in_extensions=true
-        elif $in_extensions && [[ "$stripped" == *:* ]] && [[ "$stripped" != "#"* ]]; then
+            section="extensions"
+        elif [[ "$stripped" == "exclude-ext-all:" ]]; then
+            section="exclude-ext-all"
+        elif [[ "$section" == "extensions" ]] && [[ "$stripped" == *:* ]] && [[ "$stripped" != "#"* ]]; then
             local name="${stripped%%:*}"
             local version="${stripped#*:}"
             name="${name// /}"
@@ -64,8 +67,12 @@ parse_versions_file() {
             if [[ -n "$name" && -n "$version" ]]; then
                 REF_EXTENSIONS["$name"]="$version"
             fi
+        elif [[ "$section" == "exclude-ext-all" ]] && [[ "$stripped" == "- "* ]]; then
+            local val="${stripped#- }"
+            val="${val// /}"
+            EXCLUDE_EXT_ALL+=("$val")
         elif [[ "$stripped" != "" && "$stripped" != "#"* && "$stripped" != "reference:" ]]; then
-            in_extensions=false
+            section=""
         fi
     done < "$VERSIONS_FILE"
 
@@ -294,9 +301,19 @@ run_regression() {
         COMBO_LATEST_EXTS+=("${ext}")
     done
 
-    if [[ ${#ext_names[@]} -gt 1 ]]; then
+    # Build ext-all combo, excluding extensions listed in exclude-ext-all
+    local all_ext_names=()
+    for ext in "${ext_names[@]}"; do
+        local excluded=false
+        for ex in "${EXCLUDE_EXT_ALL[@]+"${EXCLUDE_EXT_ALL[@]}"}"; do
+            if [[ "$ext" == "$ex" ]]; then excluded=true; break; fi
+        done
+        if ! $excluded; then all_ext_names+=("$ext"); fi
+    done
+
+    if [[ ${#all_ext_names[@]} -gt 1 ]]; then
         local ref_all="" latest_all=""
-        for ext in "${ext_names[@]}"; do
+        for ext in "${all_ext_names[@]}"; do
             ref_all="${ref_all:+${ref_all}|}${ext}==${REF_EXTENSIONS[$ext]}"
             latest_all="${latest_all:+${latest_all}|}${ext}"
         done

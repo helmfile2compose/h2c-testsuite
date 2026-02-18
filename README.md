@@ -68,9 +68,16 @@ reference:
     keycloak: v0.2.0
     servicemonitor: v0.1.0
     trust-manager: v0.1.1
+    nginx: v0.1.0
+    traefik: v0.1.0
+    flatten-internal-urls: v0.1.1
+  exclude-ext-all:
+    - flatten-internal-urls
 ```
 
-Extensions listed here are tested; unlisted = skipped. Extensions without released tags (nginx, traefik) cannot be pinned and are excluded from regression.
+Extensions listed here are tested individually; unlisted are skipped. Extensions in `exclude-ext-all` are excluded from the combined `ext-all` combo (e.g. due to incompatibilities declared in the registry).
+
+**Future**: `exclude-ext-all` is a stopgap. The plan is to replace it with explicit `ext-sets` — named combos of extensions to test together — and switch the YAML parser from the hand-rolled state machine to `yq`.
 
 ## CI
 
