@@ -1,0 +1,212 @@
+# Basic DaemonSet (log collector with hostPath and tolerations)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: test
+  labels:
+    app: fluentd
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: fluentd
+          image: fluent/fluentd:v1.17-debian-1
+          ports:
+            - containerPort: 24224
+              name: forward
+            - containerPort: 9880
+              name: http
+          env:
+            - name: FLUENT_ELASTICSEARCH_HOST
+              value: "elasticsearch"
+            - name: FLUENT_ELASTICSEARCH_PORT
+              value: "9200"
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: containers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: containers
+          hostPath:
+            path: /var/lib/docker/containers
+---
+# DaemonSet with init container
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-monitor
+  namespace: test
+  labels:
+    app: node-monitor
+spec:
+  selector:
+    matchLabels:
+      app: node-monitor
+  template:
+    metadata:
+      labels:
+        app: node-monitor
+    spec:
+      initContainers:
+        - name: setup-dirs
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /data/metrics && chown 1000:1000 /data/metrics"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: monitor
+          image: prom/node-exporter:v1.8.1
+          ports:
+            - containerPort: 9100
+              name: metrics
+          args:
+            - "--path.rootfs=/host"
+            - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: rootfs
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: rootfs
+          hostPath:
+            path: /
+---
+# Basic CronJob (nightly cleanup)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-cleanup
+  namespace: test
+  labels:
+    app: log-cleanup
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: log-cleanup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: busybox:1.36
+              command: ["sh", "-c", "find /var/log/app -name '*.log' -mtime +7 -delete"]
+              volumeMounts:
+                - name: app-logs
+                  mountPath: /var/log/app
+          volumes:
+            - name: app-logs
+              emptyDir: {}
+---
+# CronJob with multiple containers
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-generator
+  namespace: test
+  labels:
+    app: report-generator
+spec:
+  schedule: "30 6 * * 1"
+  concurrencyPolicy: Replace
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: report-generator
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: generate
+              image: myregistry/report-gen:v2.1.0
+              command: ["python", "generate_report.py"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: report-secrets
+                      key: database-url
+                - name: OUTPUT_DIR
+                  value: "/reports"
+              volumeMounts:
+                - name: reports
+                  mountPath: /reports
+            - name: upload
+              image: amazon/aws-cli:2.15.0
+              command: ["sh", "-c", "aws s3 sync /reports s3://company-reports/weekly/"]
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: "eu-west-1"
+              volumeMounts:
+                - name: reports
+                  mountPath: /reports
+                  readOnly: true
+          volumes:
+            - name: reports
+              emptyDir: {}
+---
+# Job with parallelism and completions
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: batch-index
+  namespace: test
+  labels:
+    app: batch-index
+spec:
+  completions: 10
+  parallelism: 3
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: batch-index
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: indexer
+          image: myregistry/indexer:v1.3.0
+          command: ["python", "index.py", "--batch-mode"]
+          env:
+            - name: ELASTICSEARCH_URL
+              value: "http://elasticsearch:9200"
+            - name: REDIS_URL
+              value: "redis://redis-master:6379"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

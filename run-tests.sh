@@ -25,20 +25,27 @@ trap cleanup EXIT
 PERF_N=""
 KEEP=false
 CORE_OVERRIDE=""
+LOCAL_CORE=""
 declare -a EXT_OVERRIDES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --perf)   PERF_N="$2"; shift 2 ;;
-        --core)   CORE_OVERRIDE="$2"; shift 2 ;;
-        --ext)    EXT_OVERRIDES+=("$2"); shift 2 ;;
-        --keep)   KEEP=true; shift ;;
+        --perf)        PERF_N="$2"; shift 2 ;;
+        --core)        CORE_OVERRIDE="$2"; shift 2 ;;
+        --local-core)  LOCAL_CORE="$2"; shift 2 ;;
+        --ext)         EXT_OVERRIDES+=("$2"); shift 2 ;;
+        --keep)        KEEP=true; shift ;;
         -h|--help)
-            echo "Usage: $0 [--core vX.Y.Z] [--ext name==vX.Y.Z ...] [--perf N] [--keep]"
+            echo "Usage: $0 [--core vX.Y.Z] [--local-core /path/to/helmfile2compose.py] [--ext name==vX.Y.Z ...] [--perf N] [--keep]"
             exit 0 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
+
+if [[ -n "$LOCAL_CORE" && ! -f "$LOCAL_CORE" ]]; then
+    echo "Error: local core not found: $LOCAL_CORE"
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # YAML parser (no pyyaml needed)
@@ -105,8 +112,12 @@ install_from_main() {
     local exts=("$@")
 
     mkdir -p "$workdir/.h2c/extensions"
-    curl -fsSL "$RAW_BASE/helmfile2compose/h2c-core/main/helmfile2compose.py" \
-        -o "$workdir/.h2c/helmfile2compose.py"
+    if [[ -n "$LOCAL_CORE" ]]; then
+        cp "$LOCAL_CORE" "$workdir/.h2c/helmfile2compose.py"
+    else
+        curl -fsSL "$RAW_BASE/helmfile2compose/h2c-core/main/helmfile2compose.py" \
+            -o "$workdir/.h2c/helmfile2compose.py"
+    fi
 
     if [[ ${#exts[@]} -gt 0 ]]; then
         # Fetch registry once to resolve repo/file for each extension
@@ -198,7 +209,9 @@ download_core() {
     local dest="$1"
     local version="$2"  # tag or "main"
 
-    if [[ "$version" == "main" ]]; then
+    if [[ "$version" == "main" && -n "$LOCAL_CORE" ]]; then
+        cp "$LOCAL_CORE" "$dest"
+    elif [[ "$version" == "main" ]]; then
         curl -fsSL "$RAW_BASE/helmfile2compose/h2c-core/main/helmfile2compose.py" -o "$dest"
     else
         curl -fsSL "$RAW_BASE/helmfile2compose/h2c-core/refs/tags/$version/helmfile2compose.py" -o "$dest"
